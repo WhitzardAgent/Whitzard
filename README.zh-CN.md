@@ -123,4 +123,4 @@ Token 来自服务端对全部 **1,507** 条打包 trace 的聚合，仅接受�
 
 ---
 
-WhitzardAgent 是一支来自**复旦大学**、**上海创新研究院**与**上海浦东密码学研究院**的研究团队，聚焦智能体系统的安全（security & safety）。—— [whitzard.tech](https://whitzard.tech)
+WhitzardAgent 是一支来自**复旦大学**、**上海创智学院**与**上海浦东密码研究院**的研究团队，聚焦智能体系统的安全。—— [whitzard.tech](https://whitzard.tech)
