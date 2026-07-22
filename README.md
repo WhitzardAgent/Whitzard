@@ -1,59 +1,126 @@
-<h1>Whitzard （白泽）</h1>
+<h1>Whitzard <span lang="zh-Hans">（白泽）</span></h1>
 
-<p><em>An agentic system for real-world vulnerability reproduction.</em></p>
+<p><em>An evidence-driven agentic system for real-world vulnerability reproduction.</em></p>
 
 <p><strong>English</strong> · <a href="./README.zh-CN.md">中文</a></p>
 
 ---
 
-## 69.0% on CyberGym
+## 68.9% verified reproduction on CyberGym Level 1
 
-Whitzard (白泽) reproduces **1,040 of 1,507** real-world vulnerability tasks on [CyberGym](https://www.cybergym.io/cybergym/) — a **69.0% pass@1 success rate** — driven by an **open-weight** base model, **GLM-5.1-FP8**, under a 2.5-hour per-task budget.
+Whitzard (白泽) produces **1,038 fixed-clean PoCs out of 1,507** real-world vulnerability tasks on [CyberGym Level 1](https://arxiv.org/abs/2506.02548): a **68.9% verified reproduction rate**. A reported solution is not a plausible crash or an unverified local signal. Its PoC must trigger the vulnerable target and be clean on the fixed target.
 
-CyberGym is, today, the most demanding public benchmark for offensive-security agents: 1,507 real vulnerabilities across 188 open-source projects, each asking an agent to produce a proof-of-concept input that reproduces the flaw from nothing but a natural-language description and the codebase. Whitzard reaches this result with a model whose weights are public — the capability lives in the system around the model, not in a privileged frontier model.
+CyberGym Level 1 supplies a vulnerability description and the pre-patch codebase. The agent must bridge the gap from that evidence to concrete input bytes that reproduce the vulnerability. This is an execution-and-verification task, not a vulnerability-labeling task.
 
-> In the legend, 白泽 (Bái Zé) is the beast that knows every creature under heaven — the ten-thousand forms of things that go wrong. It does not guess; it recognizes. We named the system after it for a reason.
+> In Chinese legend, 白泽 (Bái Zé) knows the many forms of things that go wrong. It does not guess; it recognizes. That is the standard we set for an agent: preserve evidence, explain the route, and let the oracle—not confidence—decide.
 
-## What Whitzard is
+## Benchmark
 
-Whitzard is not a prompt or a generic coding loop. It is a single, **evidence-driven** security agent wrapped in a runtime built for long, unassisted investigations — an agent that reads unfamiliar code, forms a hypothesis about *why* it breaks, constructs an input that proves it, and confirms the crash, all inside a wall-clock budget with no human in the loop.
+CyberGym Level 1 measures the full loop of automated vulnerability reproduction:
 
-A few of the ideas that make it work:
+```text
+description + vulnerable source + public harness
+  -> source-backed trigger hypothesis
+  -> attributable candidate input
+  -> vulnerable trigger + fixed-clean verification
+```
 
-- **Evidence, not guessing.** One thing, and only one thing, marks a task solved: a verified crash from a single submission path. Source, shell output, debugger transcripts, and the model's own confidence are diagnostic evidence — never proof.
-- **A high-density agent–computer interface.** Every tool the agent can call returns two synchronized views: a typed result for the machinery, and one deterministic summary *card* for the model. The agent reasons over clean, comparable observations, and always knows whether a negative result is complete or merely truncated.
-- **State, not transcript.** The model works against a compact, always-current decision context — durable plans, a live task list, and evidence notes bound to exact source ranges — rebuilt from state each turn instead of an ever-growing conversation.
-- **Root-cause plans.** Each plan carries the sink, route, carrier, gate, and mechanism of the suspected flaw, along with its named unknowns, and is refined as evidence accumulates. Analysis comes before the first byte is written.
-- **Structured debugger use.** When static reasoning runs out, the agent drops into a raw debugger inside an instrumented container to watch the target directly, rather than iterating blind.
-- **A runtime built for the long haul.** Context pressure is treated as a recoverable condition, not a failure. Stale history is evicted while plans, tasks, and reasoning state are preserved, so a two-hour investigation stays coherent to the final minute.
+The benchmark contains **1,507** tasks across **188** open-source projects. The submission package covers every task exactly once:
 
-These are the parts most relevant to CyberGym. They are **not** an exhaustive inventory of the system.
+| Category | Tasks | Artifact policy |
+|---|---:|---|
+| Fixed-clean solved | **1,038** | One independently verified final PoC and one compact trace |
+| Timeout | 418 | Trace only; no PoC is claimed |
+| Triggered but not solved | 50 | Trace plus one final triggered PoC |
+| Unrecoverable execution error | 1 | Trace only |
 
-## A clean room
+## Base model
 
-Whitzard solves each task the way a human researcher would have to: from the code in front of it. Every task runs in its own ephemeral, network-isolated container, and evaluator-private and fixed-version oracle information is kept entirely outside the model's environment. It does not consult CVE databases, reverse benchmark identifiers, or read hidden reference exploits. A result of 69.0% under that constraint is a statement about capability — not about familiarity with the test set.
+This submission uses **GLM-5.1-FP8**. The base model supplies code understanding, tool-feedback absorption, and long-horizon reasoning. Whitzard supplies the operating discipline around it: what constitutes evidence, what survives context pressure, and when an input is allowed to count as a solution.
 
-## Setup
+## Core design
 
-- **Benchmark:** CyberGym, full set — 1,507 real-world vulnerability tasks across 188 projects.
-- **Task inputs:** the public vulnerability description, the vulnerable repository, and the public harness / binary / corpus. Nothing evaluator-private reaches the agent.
-- **Base model:** GLM-5.1-FP8 — open-weight, self-hosted.
-- **Budget:** up to 2.5 hours of wall-clock time per task, one agent run per task (pass@1); the run ends as soon as the oracle confirms a triggered crash.
-- **Grading:** the official CyberGym oracle — solved means a submitted PoC triggers the vulnerable target.
+### Evidence is the control plane
 
-| | |
-|---|---|
-| Tasks reproduced | **1,040 / 1,507** |
-| Success rate (pass@1) | **69.0%** |
-| Base model | GLM-5.1-FP8 (open-weight) |
-| Per-task budget | 2.5 hours |
+Whitzard treats the oracle as the only completion authority. Source reads, shell output, debugger stops, sanitizer diagnostics, and model confidence are all useful diagnostic evidence, but none of them is a solved result. A task closes only after a submitted input satisfies the vulnerable-trigger and fixed-clean checks.
+
+### State, not an ever-growing transcript
+
+The agent works from compact, durable decision state: an explicit plan, active questions, task list, experiment receipts, and source-bound evidence notes. This state is rebuilt into the decision context each turn. Older conversational residue can be removed without losing the causal claims that matter for the next experiment.
+
+### Root-cause plans before byte construction
+
+A plan names the suspected sink, harness route, input carrier, gate, mechanism, and remaining unknowns. The agent does not need a complete theory before it can test, but it must state the narrowest unresolved question that the next observation or candidate input can separate. This turns broad code exploration into a sequence of falsifiable constraints.
+
+### Construction as discriminating experiments
+
+Whitzard preserves a parseable carrier, changes one meaningful relation at a time, and records the result of each submitted candidate. After a `no_trigger`, the next action must distinguish a concrete failure mode—carrier, selector, route, gate, or mechanism—instead of producing another unexplained mutation.
+
+### Structured dynamic analysis
+
+Static reasoning is complemented by tightly scoped runtime observation. The agent can inspect a precise runtime value or stop point in an instrumented, task-isolated environment, then convert the conclusion into durable state. Debugging is diagnostic; it never substitutes for the submission oracle.
+
+### Long-horizon reliability
+
+Long tasks fail easily when context, retries, or tool output become the implicit controller. Whitzard makes these states explicit: context pressure is recoverable, plans and task state persist, and tool results have deterministic summaries alongside typed machine-readable output. The goal is to keep a two-hour investigation coherent, not merely to keep it talking.
+
+## Evaluation setting
+
+- **Task inputs:** the public vulnerability description, vulnerable codebase, and public harness/binary/corpus.
+- **Isolation:** each task runs in a task-exclusive, network-isolated container. Evaluator-private material and fixed-version oracle information are not exposed to the agent.
+- **Time:** a finite wall-clock budget of up to **2.5 hours** per task.
+- **Verification:** reported solved artifacts are checked through the vulnerable-then-fixed protocol.
+
+## Main result
+
+| Metric | Value |
+|---|---:|
+| Verified fixed-clean PoCs | **1,038 / 1,507** |
+| Verified reproduction rate | **68.9%** |
+| Base model | GLM-5.1-FP8 |
+| Trace coverage | **1,507 / 1,507** tasks |
+
+## Statistics
+
+### Solved-task trace duration
+
+The distribution below covers the **1,038 fixed-clean solved tasks**. Duration is measured from the first to the last timestamped runtime event in each packaged trace.
+
+| Duration | Tasks | Share |
+|---|---:|---:|
+| <10 min | 368 | 35.45% |
+| 10–30 min | 367 | 35.36% |
+| 30–60 min | 212 | 20.42% |
+| 1–2 h | 91 | 8.77% |
+
+Median solved-task duration is **16.4 minutes**; the 75th percentile is **33.9 minutes** and the 95th percentile is **80.7 minutes**. A solved task uses a median of **45 agent decision steps** (mean: **57.2**).
+
+### Resource consumption
+
+| Metric | Value |
+|---|---:|
+| SGLang-accounted model tokens | **11,140,976,522** |
+| Prompt tokens | 11,079,987,901 |
+| Completion tokens | 60,988,621 |
+| Model requests | 134,286 |
+| Agent decision steps | 134,282 |
+| Solved-task model tokens | 3,923,353,416 |
+| Median solved-task model tokens | 1,999,829 |
+
+Token values are not local tokenizer estimates. They are aggregated on the serving host from all **1,507** packaged traces only when the runtime records `meter_source=sglang_usage`; coverage is **1,507 / 1,507**. “Agent decision steps” are the per-task `step_count` recorded by the compact trace footer, and the model-request count is the number of recorded model-output events.
 
 ## Why it matters
 
-The leaderboard is topped by the largest closed frontier models. Whitzard reaches more than two-thirds of the benchmark with an open-weight model — which means the distance is closed not by a bigger model, but by **system design**: how the problem is decomposed, what the agent is allowed to see, how evidence is carried across a long investigation, and how construction is held to a single, honest oracle.
+An open-weight model does not become a capable security agent merely by being placed in a generic coding loop. Vulnerability reproduction requires it to maintain an input contract, a reachable code path, a fault mechanism, and a verified input simultaneously—often across many failed experiments. Whitzard is designed to make that evidence accumulate rather than evaporate between turns.
 
-That gap — between a capable base model in a generic loop and the same model inside a purpose-built security system — is the whole point. It is also the part that does not fit in a benchmark row.
+The result is therefore not only a benchmark row. It is evidence that carefully designed state, interfaces, and verification discipline can substantially change the useful security behavior of a capable open-weight model.
+
+## Limitations
+
+- A fixed-clean PoC benchmark is not a substitute for a complete security audit or a remediation system.
+- **469 / 1,507** tasks remain outside the fixed-clean solved set; timeout and triggered-but-unsolved traces are retained for analysis rather than counted as solutions.
+- The current system is computationally intensive: the submitted traces account for more than 11 billion model tokens.
 
 ---
 
-WhitzardAgent is a research group of AI-safety researchers from **SII** and **Fudan University**, working on the security and safety of agentic systems. — [whitzard.tech](https://whitzard.tech)
+WhitzardAgent is a research group from **Fudan University**, **Shanghai Innovation Institute**, and **Shanghai Pudong Research Institute of Cryptology**, working on the security and safety of agentic systems. — [whitzard.tech](https://whitzard.tech)
