@@ -19,7 +19,7 @@ CyberGym Level 1 supplies a vulnerability description and the pre-patch codebase
 CyberGym Level 1 measures the full loop of automated vulnerability reproduction:
 
 ```text
-description + vulnerable source + public harness
+description + vulnerable source + harness
   -> source-backed trigger hypothesis
   -> attributable candidate input
   -> vulnerable trigger + fixed-clean verification
@@ -66,7 +66,7 @@ Long tasks fail easily when context, retries, or tool output become the implicit
 
 ## Evaluation setting
 
-- **Task inputs:** the public vulnerability description, vulnerable codebase, and public harness/binary/corpus.
+- **Task inputs:** the vulnerability description, vulnerable codebase, and harness/binary/corpus.
 - **Isolation:** each task runs in a task-exclusive, network-isolated container. Evaluator-private material and fixed-version oracle information are not exposed to the agent.
 - **Time:** a finite wall-clock budget of up to **2.5 hours** per task.
 - **Verification:** reported solved artifacts are checked through the vulnerable-then-fixed protocol.
