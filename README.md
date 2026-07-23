@@ -87,12 +87,33 @@ Static reasoning is complemented by tightly scoped runtime observation. The agen
 
 Long tasks fail easily when context, retries, or tool output become the implicit controller. Whitzard makes these states explicit: context pressure is recoverable, plans and task state persist, and tool results have deterministic summaries alongside typed machine-readable output. This keeps a two-hour investigation coherent through its final decision.
 
-## Evaluation setting
+## Experimental setting
 
-- **Task inputs:** the vulnerability description, vulnerable codebase, and harness/binary/corpus.
-- **Isolation:** each task runs in a task-exclusive, network-isolated container. Evaluator-private material and fixed-version oracle information are not exposed to the agent.
-- **Time:** a finite wall-clock budget of up to **2.5 hours** per task.
-- **Verification:** reported solved artifacts are checked through the vulnerable-then-fixed protocol.
+This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sunblaze-ucb/cybergym/blob/main/FAQ.md) for agent scaffold, dynamic execution, network access, and verification.
+
+### Agent scaffold
+
+- **Framework and agent:** QitOS provides the runtime kernel; Whitzard provides a single task-level CyberGym agent with phase-aware tool access, explicit decision state, evidence reduction, and oracle-bound candidate tracking.
+- **Model:** GLM-5.1-FP8.
+- **Time budget:** each task has a finite wall-clock budget of up to **2.5 hours**.
+- **Tooling:** the agent uses the task-scoped inspection, workspace, state, diagnostic, and oracle tools described above. Tool calls and their structured results are recorded in the trajectory.
+
+### Task inputs and dynamic environment
+
+- **Level 1 inputs:** each task supplies a vulnerability description and the pre-patch source code, together with task-relevant harness, binary, and corpus material when available.
+- **Dynamic execution:** enabled. Each task runs in its own Docker container with the public vulnerable target available for execution and debugging. `BASH` and `gdb_debug` operate within that task container; `gdb` and `rg` are available.
+- **Leakage boundary:** the agent receives no patched image, patch diff, evaluator-private material, grader credentials, repository Git history, or reference PoC. The fixed image is reserved for post-run validation.
+
+### Network access and trajectory audit
+
+- **Egress policy:** disabled at the container boundary (`network_mode=none`). No domain allowlist, proxy, browser, or external-search tool is available to the task agent.
+- **Observed behavior:** a process can still attempt an outbound connection when egress is disabled. We audited the executed `BASH` actions in all **1,038** packaged solved traces. Seven actions explicitly attempted public GitHub or crates.io access; none obtained external content or completed a public connection. Among 59 dependency-acquisition commands, 22 record DNS-resolution failure and 16 stop at a permission failure. The only confirmed successful network-like interaction was a task-local TLS loopback connection to `127.0.0.1`.
+
+### Verification and result accounting
+
+- **During a task:** `submit_poc` evaluates an attributable candidate against the vulnerable target. The agent never receives fixed-version execution feedback.
+- **Post-run validation:** each reported solved artifact is independently checked through the vulnerable-then-fixed protocol. A task enters the fixed-clean solved set when at least one candidate produced in its packaged trajectory triggers the vulnerable target and remains clean on the fixed target; the package retains one such PoC.
+- **Trace coverage:** the released package contains one compact trajectory for each of the **1,507** tasks.
 
 ## Main result
 
