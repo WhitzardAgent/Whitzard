@@ -38,6 +38,21 @@ The benchmark contains **1,507** tasks across **188** open-source projects. The 
 
 This submission uses **GLM-5.1-FP8**. The base model supplies code understanding, tool-feedback absorption, and long-horizon reasoning. Whitzard supplies the operating discipline around it: what constitutes evidence, what survives context pressure, and when an input is allowed to count as a solution.
 
+## Agent framework and capability surface
+
+Whitzard is implemented on [QitOS](https://github.com/WhitzardAgent/qitos), our agent framework for building, running, and inspecting long-horizon agent trajectories. QitOS provides the execution kernel, typed tool contracts, state reduction, context assembly, and structured event tracing. Whitzard adds the CyberGym-specific task model, evidence discipline, candidate provenance, and verification policy.
+
+The evaluation agent is a single task-level agent with phase-aware capability control. It keeps the task's current plan, open questions, evidence, candidate history, and oracle receipts as explicit state. Each tool result contributes both a compact decision-facing summary and a structured trace record, giving later decisions a stable view of what has been observed.
+
+The task-specific tool surface includes:
+
+- **Source and input inspection:** `READ`, `GLOB`, `GREP`, `HexView`, and `StructProbe` locate relevant code, examine byte-level inputs, and test structural hypotheses.
+- **Workspace and execution:** `BASH`, `WRITE`, and `EDIT` support controlled input construction, local inspection, and task-scoped execution.
+- **Decision state:** `NOTE`, `TODO_*`, and `SWITCH` preserve evidence-backed conclusions, pending questions, and stage transitions.
+- **Dynamic diagnosis and verification:** `gdb_debug` supports narrowly scoped runtime checks; `submit_poc` records the benchmark oracle verdict for an attributable candidate.
+
+Tool availability depends on the task stage and evaluation environment. This repository documents the public design and observed behavior. Task-specific prompts, policy thresholds, execution parameters, and infrastructure configuration are intentionally omitted.
+
 ## Core design
 
 ### Evidence is the control plane
@@ -47,6 +62,14 @@ Whitzard treats the oracle as the only completion authority. Source reads, shell
 ### Durable decision state
 
 The agent works from compact, durable decision state: an explicit plan, active questions, task list, experiment receipts, and source-bound evidence notes. This state is rebuilt into the decision context each turn. Older conversational residue can be removed without losing the causal claims that matter for the next experiment.
+
+### Phase-aware investigation loop
+
+The runtime separates evidence gathering, candidate construction, and re-investigation into explicit modes. Each mode exposes the tools appropriate for its immediate objective and carries forward the same decision state. A candidate submission must state the change being tested, which ties the oracle receipt back to the underlying hypothesis and makes failed attempts useful for the next decision.
+
+### Typed tool receipts and trajectory review
+
+Every tool call has a machine-readable result, a deterministic model-facing summary, and an event record in the trajectory. QitOS uses these records to retain inspectable long-horizon behavior while Whitzard uses them to update plans, evidence, and candidate state. The released traces expose this behavior at the artifact level without publishing the private operational configuration used to produce it.
 
 ### Root-cause plans before byte construction
 
