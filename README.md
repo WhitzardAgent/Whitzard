@@ -174,4 +174,4 @@ The result is a benchmark measurement and evidence that carefully designed state
 
 ---
 
-WhitzardAgent is a research group from **Fudan University**, **Shanghai Innovation Institute**, and **Shanghai Pudong Research Institute of Cryptology**, working on the security and safety of agentic systems. — [whitzard.tech](https://whitzard.tech)
+WhitzardAgent is a research group from **Fudan University**, **NUWA Lab**, **Shanghai Innovation Institute**, and **Shanghai Pudong Research Institute of Cryptology**, working on the security and safety of agentic systems. — [whitzard.tech](https://whitzard.tech)

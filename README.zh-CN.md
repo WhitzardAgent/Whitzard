@@ -174,4 +174,4 @@ Token 与时间来自最终包中可用原始完整 trace 的聚合。cache-read
 
 ---
 
-WhitzardAgent 是一支来自**复旦大学**、**上海创智学院**与**上海浦东密码研究院**的研究团队，聚焦智能体系统的安全。—— [whitzard.tech](https://whitzard.tech)
+WhitzardAgent 是一支来自**复旦大学**、**女娲实验室**、**上海创智学院**与**上海浦东密码研究院**的研究团队，聚焦智能体系统的安全。—— [whitzard.tech](https://whitzard.tech)
