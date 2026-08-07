@@ -34,11 +34,13 @@ The benchmark contains **1,507** tasks across **188** open-source projects. The 
 | Triggered, unresolved | 94 | Trace plus one final triggered PoC when available |
 | Unrecoverable execution error | 7 | Trace or task placeholder only; no PoC is claimed |
 
-## Base model and fuzzing-assisted construction
+## Base model and reachability-guided fuzzing
 
 This submission replaces the previous **GLM-5.1-FP8** base with **DeepSeek-V4-Flash-0731**. The base model supplies code understanding, tool-feedback absorption, and long-horizon reasoning. Whitzard supplies the operating discipline around it: what constitutes evidence, what survives context pressure, and when an input is allowed to count as a solution.
 
-The largest system-level improvement in this round is the addition of a task-local **fuzzer tool**. The fuzzer gives the agent a controlled way to explore input-carrier variants, boundary conditions, and parser states once it has a source-backed route hypothesis. It is used as a construction aid rather than a completion oracle: `submit_poc` remains the only benchmark verdict, and fixed-side behavior is still withheld from the task agent.
+The largest system-level improvement in this round is the addition of **`fuzz_witness`**, a task-local reachability-witness tool. The agent names a function or `file:line` breakpoint and provides a corpus of seed inputs; the tool drives the staged libFuzzer target under `gdb` until some mutated input reaches that location. When the breakpoint fires, the tool injects a synthetic abort so libFuzzer saves the current input, then stages that input under `pocs/` as a witness.
+
+This distinction is important: a `fuzz_witness` artifact is not reported as a crash and is not treated as proof that the vulnerability triggers. It is an input proven to reach a model-selected code location. The agent uses it as an intermediate construction object—seed it into another, deeper reachability run, inspect it, or modify it toward the branch or gate required by the task. `submit_poc` remains the only benchmark verdict, and fixed-side behavior is still withheld from the task agent.
 
 ## Agent framework and capability surface
 
@@ -51,7 +53,7 @@ The task-specific tool surface includes:
 - **Source and input inspection:** `READ`, `GLOB`, `GREP`, `HexView`, and `StructProbe` locate relevant code, examine byte-level inputs, and test structural hypotheses.
 - **Workspace and execution:** `BASH`, `WRITE`, and `EDIT` support controlled input construction, local inspection, and task-scoped execution.
 - **Decision state:** `NOTE`, `TODO_*`, and `SWITCH` preserve evidence-backed conclusions, pending questions, and stage transitions.
-- **Fuzzing-assisted construction:** the task-local fuzzer explores candidate input families and helps refine carriers toward the source-backed mechanism under investigation.
+- **Reachability-guided fuzzing:** `fuzz_witness` combines libFuzzer and `gdb` to produce staged witness inputs that reach model-selected functions or `file:line` locations.
 - **Dynamic diagnosis and verification:** `gdb_debug` supports narrowly scoped runtime checks; `submit_poc` records the benchmark oracle verdict for an attributable candidate.
 
 Tool availability depends on the task stage and evaluation environment. This repository documents the public design and observed behavior. Task-specific prompts, policy thresholds, execution parameters, and infrastructure configuration are intentionally omitted.
@@ -82,7 +84,7 @@ A plan names the suspected sink, harness route, input carrier, gate, mechanism, 
 
 Whitzard preserves a parseable carrier, changes one meaningful relation at a time, and records the result of each submitted candidate. After a `no_trigger`, the next action must distinguish a concrete failure mode—carrier, selector, route, gate, or mechanism—instead of producing another unexplained mutation.
 
-The fuzzer strengthens this loop by turning a source-backed construction idea into a family of bounded experiments. It helps search nearby byte-level variants while keeping the agent responsible for explaining why a candidate still matches the task description and the observed code path.
+`fuzz_witness` strengthens this loop when hand-built inputs cannot yet reach the relevant branch. A shallow witness can be used as a seed for a deeper breakpoint, or inspected and edited by hand. The tool deliberately separates reachability from vulnerability reproduction: reaching a location is useful evidence, but only the later `submit_poc` receipt can turn a candidate into a solved result.
 
 ### Structured dynamic analysis
 
@@ -101,7 +103,7 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 - **Framework and agent:** QitOS provides the runtime kernel; Whitzard provides a single task-level CyberGym agent with phase-aware tool access, explicit decision state, evidence reduction, and oracle-bound candidate tracking.
 - **Model:** DeepSeek-V4-Flash-0731.
 - **Time budget:** each task has a finite wall-clock budget of up to **4 hours**.
-- **Tooling:** the agent uses the task-scoped inspection, fuzzing, workspace, state, diagnostic, and oracle tools described above. Tool calls and their structured results are recorded in the trajectory.
+- **Tooling:** the agent uses the task-scoped inspection, reachability-guided fuzzing, workspace, state, diagnostic, and oracle tools described above. Tool calls and their structured results are recorded in the trajectory.
 
 ### Task inputs and dynamic environment
 
@@ -112,7 +114,7 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 ### Network access and trajectory audit
 
 - **Egress policy:** disabled at the container boundary (`network_mode=none`). No domain allowlist, proxy, browser, or external-search tool is available to the task agent.
-- **Observed behavior:** a process can still attempt an outbound connection when egress is disabled, but no external-search or browsing capability is exposed to the task agent. Candidate construction, including fuzzing-assisted construction, runs inside the task-local environment.
+- **Observed behavior:** a process can still attempt an outbound connection when egress is disabled, but no external-search or browsing capability is exposed to the task agent. Candidate construction, including `fuzz_witness`, runs inside the task-local environment.
 
 ### Verification and result accounting
 
