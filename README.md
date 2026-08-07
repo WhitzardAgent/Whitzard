@@ -6,9 +6,9 @@
 
 ---
 
-## 68.9% verified reproduction on CyberGym Level 1
+## 91.2% verified reproduction on CyberGym Level 1
 
-Whitzard (白泽) produces **1,038 fixed-clean PoCs out of 1,507** real-world vulnerability tasks on [CyberGym Level 1](https://arxiv.org/abs/2506.02548): a **68.9% verified reproduction rate**. Each reported solution contains a PoC that triggers the vulnerable target and remains clean on the fixed target.
+Whitzard (白泽) produces **1,374 fixed-clean PoCs out of 1,507** real-world vulnerability tasks on [CyberGym Level 1](https://arxiv.org/abs/2506.02548): a **91.2% verified reproduction rate**. Each reported solution contains a PoC that triggers the vulnerable target and remains clean on the fixed target.
 
 CyberGym Level 1 supplies a vulnerability description and the pre-patch codebase. The agent must bridge the gap from that evidence to concrete input bytes that reproduce the vulnerability. The benchmark evaluates construction, execution, and verification.
 
@@ -29,14 +29,16 @@ The benchmark contains **1,507** tasks across **188** open-source projects. The 
 
 | Category | Tasks | Artifact policy |
 |---|---:|---|
-| Fixed-clean solved | **1,038** | One independently verified final PoC and one compact trace |
-| Timeout | 418 | Trace only; no PoC is claimed |
-| Triggered, unresolved | 50 | Trace plus one final triggered PoC |
-| Unrecoverable execution error | 1 | Trace only |
+| Fixed-clean solved | **1,374** | One independently verified final PoC and one compact trace |
+| Timeout | 32 | Trace only; no PoC is claimed |
+| Triggered, unresolved | 94 | Trace plus one final triggered PoC when available |
+| Unrecoverable execution error | 7 | Trace or task placeholder only; no PoC is claimed |
 
-## Base model
+## Base model and fuzzing-assisted construction
 
-This submission uses **GLM-5.1-FP8**. The base model supplies code understanding, tool-feedback absorption, and long-horizon reasoning. Whitzard supplies the operating discipline around it: what constitutes evidence, what survives context pressure, and when an input is allowed to count as a solution.
+This submission replaces the previous **GLM-5.1-FP8** base with **DeepSeek-V4-Flash-0731**. The base model supplies code understanding, tool-feedback absorption, and long-horizon reasoning. Whitzard supplies the operating discipline around it: what constitutes evidence, what survives context pressure, and when an input is allowed to count as a solution.
+
+The largest system-level improvement in this round is the addition of a task-local **fuzzer tool**. The fuzzer gives the agent a controlled way to explore input-carrier variants, boundary conditions, and parser states once it has a source-backed route hypothesis. It is used as a construction aid rather than a completion oracle: `submit_poc` remains the only benchmark verdict, and fixed-side behavior is still withheld from the task agent.
 
 ## Agent framework and capability surface
 
@@ -49,6 +51,7 @@ The task-specific tool surface includes:
 - **Source and input inspection:** `READ`, `GLOB`, `GREP`, `HexView`, and `StructProbe` locate relevant code, examine byte-level inputs, and test structural hypotheses.
 - **Workspace and execution:** `BASH`, `WRITE`, and `EDIT` support controlled input construction, local inspection, and task-scoped execution.
 - **Decision state:** `NOTE`, `TODO_*`, and `SWITCH` preserve evidence-backed conclusions, pending questions, and stage transitions.
+- **Fuzzing-assisted construction:** the task-local fuzzer explores candidate input families and helps refine carriers toward the source-backed mechanism under investigation.
 - **Dynamic diagnosis and verification:** `gdb_debug` supports narrowly scoped runtime checks; `submit_poc` records the benchmark oracle verdict for an attributable candidate.
 
 Tool availability depends on the task stage and evaluation environment. This repository documents the public design and observed behavior. Task-specific prompts, policy thresholds, execution parameters, and infrastructure configuration are intentionally omitted.
@@ -79,6 +82,8 @@ A plan names the suspected sink, harness route, input carrier, gate, mechanism, 
 
 Whitzard preserves a parseable carrier, changes one meaningful relation at a time, and records the result of each submitted candidate. After a `no_trigger`, the next action must distinguish a concrete failure mode—carrier, selector, route, gate, or mechanism—instead of producing another unexplained mutation.
 
+The fuzzer strengthens this loop by turning a source-backed construction idea into a family of bounded experiments. It helps search nearby byte-level variants while keeping the agent responsible for explaining why a candidate still matches the task description and the observed code path.
+
 ### Structured dynamic analysis
 
 Static reasoning is complemented by tightly scoped runtime observation. The agent can inspect a precise runtime value or stop point in an instrumented, task-isolated environment, then convert the conclusion into durable state. Debugging is diagnostic; it never substitutes for the submission oracle.
@@ -94,9 +99,9 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 ### Agent scaffold
 
 - **Framework and agent:** QitOS provides the runtime kernel; Whitzard provides a single task-level CyberGym agent with phase-aware tool access, explicit decision state, evidence reduction, and oracle-bound candidate tracking.
-- **Model:** GLM-5.1-FP8.
-- **Time budget:** each task has a finite wall-clock budget of up to **2.5 hours**.
-- **Tooling:** the agent uses the task-scoped inspection, workspace, state, diagnostic, and oracle tools described above. Tool calls and their structured results are recorded in the trajectory.
+- **Model:** DeepSeek-V4-Flash-0731.
+- **Time budget:** each task has a finite wall-clock budget of up to **4 hours**.
+- **Tooling:** the agent uses the task-scoped inspection, fuzzing, workspace, state, diagnostic, and oracle tools described above. Tool calls and their structured results are recorded in the trajectory.
 
 ### Task inputs and dynamic environment
 
@@ -107,51 +112,51 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 ### Network access and trajectory audit
 
 - **Egress policy:** disabled at the container boundary (`network_mode=none`). No domain allowlist, proxy, browser, or external-search tool is available to the task agent.
-- **Observed behavior:** a process can still attempt an outbound connection when egress is disabled. We audited the executed `BASH` actions in all **1,038** packaged solved traces. Seven actions explicitly attempted public GitHub or crates.io access; none obtained external content or completed a public connection. Among 59 dependency-acquisition commands, 22 record DNS-resolution failure and 16 stop at a permission failure. The only confirmed successful network-like interaction was a task-local TLS loopback connection to `127.0.0.1`.
+- **Observed behavior:** a process can still attempt an outbound connection when egress is disabled, but no external-search or browsing capability is exposed to the task agent. Candidate construction, including fuzzing-assisted construction, runs inside the task-local environment.
 
 ### Verification and result accounting
 
 - **During a task:** `submit_poc` evaluates an attributable candidate against the vulnerable target. The agent never receives fixed-version execution feedback.
 - **Post-run validation:** each reported solved artifact is independently checked through the vulnerable-then-fixed protocol. A task enters the fixed-clean solved set when at least one candidate produced in its packaged trajectory triggers the vulnerable target and remains clean on the fixed target; the package retains one such PoC.
-- **Trace coverage:** the released package contains one compact trajectory for each of the **1,507** tasks.
+- **Artifact coverage:** the released package covers all **1,507** tasks. It contains **1,504** compact trajectories and **3** unsolved task placeholders without a claimed PoC.
 
 ## Main result
 
 | Metric | Value |
 |---|---:|
-| Verified fixed-clean PoCs | **1,038 / 1,507** |
-| Verified reproduction rate | **68.9%** |
-| Base model | GLM-5.1-FP8 |
-| Trace coverage | **1,507 / 1,507** tasks |
+| Verified fixed-clean PoCs | **1,374 / 1,507** |
+| Verified reproduction rate | **91.2%** |
+| Base model | DeepSeek-V4-Flash-0731 |
+| Task coverage | **1,507 / 1,507** tasks |
+| Compact trace artifacts | **1,504 / 1,507** tasks |
 
 ## Statistics
 
-### Solved-task trace duration
+### Submission artifact accounting
 
-The distribution below covers the **1,038 fixed-clean solved tasks**. Duration is measured from the first to the last timestamped runtime event in each packaged trace.
-
-| Duration | Tasks | Share |
-|---|---:|---:|
-| <10 min | 368 | 35.45% |
-| 10–30 min | 367 | 35.36% |
-| 30–60 min | 212 | 20.42% |
-| 1–2 h | 91 | 8.77% |
-
-Median solved-task duration is **16.4 minutes**; the 75th percentile is **33.9 minutes** and the 95th percentile is **80.7 minutes**. A solved task uses a median of **45 agent decision steps** (mean: **57.2**).
+| Metric | Value |
+|---|---:|
+| Fixed-clean solved tasks | **1,374** |
+| Unsolved tasks | 133 |
+| Timeout tasks | 32 |
+| Triggered but not fixed-clean | 94 |
+| Unrecoverable execution error | 7 |
+| Compact trace artifacts | 1,504 |
 
 ### Resource consumption
 
 | Metric | Value |
 |---|---:|
-| SGLang-accounted model tokens | **11,140,976,522** |
-| Prompt tokens | 11,079,987,901 |
-| Completion tokens | 60,988,621 |
-| Model requests | 134,286 |
-| Agent decision steps | 134,282 |
-| Solved-task model tokens | 3,923,353,416 |
-| Median solved-task model tokens | 1,999,829 |
+| Accounted model tokens | **19,397,802,493** |
+| Input tokens | 19,265,042,892 |
+| Output tokens | 132,759,601 |
+| Model requests / agent decision events | 115,661 |
+| Estimated wall-clock task time | 3,025,222 sec / 840.3 h |
+| Estimated cache-read tokens | 18,687,091,605 |
+| Estimated cache-creation tokens | 577,951,287 |
+| Estimated serving cost | 5,100 CNY / ~708 USD |
 
-Token values come from serving-host aggregation across all **1,507** packaged traces when the runtime records `meter_source=sglang_usage`; coverage is **1,507 / 1,507**. “Agent decision steps” are the per-task `step_count` recorded by the compact trace footer, and the model-request count is the number of recorded model-output events.
+Token and timing values are aggregated from the available original full traces for the final package. Cache-read and cache-creation tokens use the serving estimate that approximately **97%** of prompt tokens were cache reads.
 
 ## Why it matters
 
@@ -162,8 +167,8 @@ The result is a benchmark measurement and evidence that carefully designed state
 ## Limitations
 
 - A fixed-clean PoC benchmark evaluates vulnerability reproduction; complete security auditing and remediation require additional methods.
-- **469 / 1,507** tasks remain outside the fixed-clean solved set; timeout and triggered-unresolved traces are retained for analysis and excluded from the solved count.
-- The current system is computationally intensive: the submitted traces account for more than 11 billion model tokens.
+- **133 / 1,507** tasks remain outside the fixed-clean solved set; timeout, triggered-unresolved, and execution-error artifacts are excluded from the solved count.
+- The current system is computationally intensive: the submitted traces account for approximately **19.4 billion** model tokens.
 
 ---
 
