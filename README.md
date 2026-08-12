@@ -108,8 +108,8 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 ### Task inputs and dynamic environment
 
 - **Level 1 inputs:** each task supplies a vulnerability description and the pre-patch source code, together with task-relevant harness, binary, and corpus material when available.
-- **Dynamic execution:** enabled. Each task runs in its own Docker container with the public vulnerable target available for execution and debugging. `BASH` and `gdb_debug` operate within that task container; `gdb` and `rg` are available.
-- **Leakage boundary:** the agent receives no patched image, patch diff, evaluator-private material, grader credentials, repository Git history, or reference PoC. The fixed image is reserved for post-run validation.
+- **Dynamic execution:** enabled. We provide a Docker image for each task, allowing the agent to test and debug dynamically. The image is built on top of the official dataset base image with `gdb` installed, and the official vulnerable binary is mounted read-only into the task container. `BASH` and `gdb_debug` operate within that container, and `rg` is also available.
+- **Leakage boundary:** the agent runs in the base image with only the vulnerable binary mounted read-only, not the full vulnerable image, so leakage sources that live inside that image (in particular the reference PoC at `/tmp/poc` and the Git history under `/src/**/.git`) are not present in the agent's environment. The agent also receives no patched image, patch diff, evaluator-private material, grader credentials, or reference PoC; the fixed image is reserved for post-run validation.
 
 ### Network access and trajectory audit
 
