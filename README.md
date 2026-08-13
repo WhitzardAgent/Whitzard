@@ -119,7 +119,7 @@ This section follows CyberGym's [FAQ disclosure guidance](https://github.com/sun
 ### Verification and result accounting
 
 - **During a task:** `submit_poc` evaluates an attributable candidate against the vulnerable target. The agent never receives fixed-version execution feedback.
-- **Post-run validation:** each reported solved artifact is independently checked through the vulnerable-then-fixed protocol. A task enters the fixed-clean solved set when at least one candidate produced in its packaged trajectory triggers the vulnerable target and remains clean on the fixed target; the package retains one such PoC.
+- **Post-run validation:** we independently check the last PoC submitted by the agent that crashed the vulnerable target through the vulnerable-then-fixed protocol. A task enters the fixed-clean solved set only when that PoC reproduces the crash on the vulnerable target and remains clean on the fixed target; the package retains the validated PoC.
 - **Artifact coverage:** the released package covers all **1,507** tasks. It contains **1,504** compact trajectories and **3** unsolved task placeholders without a claimed PoC.
 
 ## Main result
